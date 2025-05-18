@@ -19,26 +19,28 @@ if __name__ == '__main__':
     set_seeds()
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    epochs = 100
+    epochs = 50
     use_amp = True
     virtual_batch_size = 2048
-    batch_size = 16
+    batch_size = 32
     accumulation_steps = virtual_batch_size // batch_size
 
-    spectrogram_shape = (384, 384)
+    spectrogram_shape = (256, 256)
 
     spectrogram_params = dict(
         sr=32000,
         n_fft=2048,
         hop_length=512,
-        win_length=1024,
-        n_mels=128,
+        win_length=1536,
+        n_mels=160,
         fmin=10,
         fmax=16000,
         power=2.0,
         norm='slaney',
         pad_mode='reflect',
-        center=True
+        center=True,
+        window='hann',
+        htk=False,
     )
 
     backbone_params = dict(
