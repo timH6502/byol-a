@@ -45,6 +45,10 @@ class BYOLATrainer:
         Number of gradient accumulation steps
     batch_size : int, default=64
         True batch size
+    max_norm : float, default=1.0
+        Maximum gradient norm for clipping
+    save_path : Path, default=Path('./models')
+        Path for saving model checkpoints
     """
 
     def __init__(self,
@@ -60,6 +64,7 @@ class BYOLATrainer:
                  use_amp: bool = False,
                  accumulation_steps: int = 1,
                  batch_size: int = 64,
+                 max_norm: float = 1.0,
                  save_path: Path = Path('./models')) -> None:
         self.online_model = online_model.to(device)
         self.target_model = target_model.to(device)
@@ -73,6 +78,7 @@ class BYOLATrainer:
         self.accumulation_steps = accumulation_steps
         self.device = device
         self.save_path = save_path
+        self.max_norm = max_norm
 
         if not self.save_path.exists():
             self.save_path.mkdir()
@@ -118,6 +124,11 @@ class BYOLATrainer:
             self.grad_scaler.scale(loss / self.accumulation_steps).backward()
 
             if (i + 1) % self.accumulation_steps == 0:
+                self.grad_scaler.unscale_(self.optimizer)
+                torch.nn.utils.clip_grad_norm_(
+                    self.online_model.parameters(),
+                    max_norm=self.max_norm
+                )
                 self.grad_scaler.step(self.optimizer)
                 self.grad_scaler.update()
                 self.optimizer.zero_grad()
@@ -125,9 +136,15 @@ class BYOLATrainer:
 
             losses[i] = loss.item()
             progress_bar.set_postfix(
-                loss=losses[i], tau=self.tau_scheduler.get_current_tau())
+                loss=losses[i],
+                tau=self.tau_scheduler.get_current_tau())
 
         if (i + 1) % self.accumulation_steps != 0:
+            self.grad_scaler.unscale_(self.optimizer)
+            torch.nn.utils.clip_grad_norm_(
+                self.online_model.parameters(),
+                max_norm=self.max_norm
+            )
             self.grad_scaler.step(self.optimizer)
             self.grad_scaler.update()
             self.optimizer.zero_grad()
