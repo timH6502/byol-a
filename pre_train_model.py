@@ -19,7 +19,7 @@ if __name__ == '__main__':
     set_seeds()
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    epochs = 2
+    epochs = 100
     use_amp = True
     virtual_batch_size = 2048
     batch_size = 16
@@ -43,8 +43,8 @@ if __name__ == '__main__':
 
     backbone_params = dict(
         pretrained=True,
-        drop_rate=0.3,
-        drop_path_rate=0.3,
+        drop_rate=0.1,
+        drop_path_rate=0.1,
         model_name='tf_efficientnet_b3.ns_jft_in1k',
         num_classes=None,
         in_chans=1,
@@ -72,13 +72,21 @@ if __name__ == '__main__':
         spectrogram_dimensions=spectrogram_shape)
 
     tau_scheduler = TauScheduler(
-        int(len(dataset) * epochs / (accumulation_steps * batch_size)), 0.996)
+        int(len(dataset) * epochs / (accumulation_steps * batch_size)), 0.99)
 
     optimizer = torch.optim.AdamW(online_model.parameters(
-    ), lr=5e-4, betas=(0.9, 0.99), weight_decay=1e-4)
+    ), lr=1e-4, betas=(0.9, 0.99), weight_decay=1e-4)
 
-    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=epochs, eta_min=1e-6)
+    lr_scheduler = torch.optim.lr_scheduler.SequentialLR(
+        optimizer,
+        [
+            torch.optim.lr_scheduler.ConstantLR(
+                optimizer, factor=1.0, total_iters=10),
+            torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=epochs-10, eta_min=1e-6)
+        ],
+        milestones=[10]
+    )
 
     loss_function = BYOLLoss()
     grad_scaler = GradScaler()
