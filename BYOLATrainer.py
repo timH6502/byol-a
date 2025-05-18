@@ -14,6 +14,36 @@ from utils import init_logger
 
 
 class BYOLATrainer:
+    """
+    BYOL-A trainer.
+
+    Parameters
+    ----------
+    online_model : RepresentationModel
+        Online network that includes backbone, projector and predictor
+    target_model : RepresentationModel
+        Target network that includes backbone and projector
+    tau_scheduler : TauScheduler
+        Scheduler for target network EMA decau parameter tau
+    optimizer : Optimizer
+        Optimizer for the online network
+    loss_function : _Loss
+        BYOL loss
+    data_set : BYOLAudioDataset
+        Audio dataset providing two augmented versions of an audio snippet
+    lr_scheduler : _LRScheduler
+        Learning rate scheduler
+    grad_scaler : GradScaler
+        Gradient scaler for mixed precision training
+    device : torch.device
+        Target device for training (CPU or GPU)
+    use_amp : bool, default=False
+        Enable automatic mixed precision
+    accumulation_steps : int, default=1
+        Number of gradient accumulation steps
+    batch_size : int, default=64
+        True batch size
+    """
 
     def __init__(self,
                  online_model: RepresentationModel,
@@ -48,6 +78,14 @@ class BYOLATrainer:
         self.logger.info(f'Trainer initialized. Training on {self.device}.')
 
     def _train_one_epoch(self) -> float:
+        """
+        Train models for one epoch.
+
+        Returns
+        -------
+        float
+            Mean loss value across all batches in the epoch
+        """
         losses = np.zeros(len(self.data_loader))
         progress_bar = tqdm(self.data_loader, desc="Training",
                             leave=True, total=len(self.data_loader))
@@ -92,6 +130,19 @@ class BYOLATrainer:
         return losses.mean()
 
     def train(self, epochs: int) -> np.ndarray:
+        """
+        Run complete training cycle for specified number of epochs.
+
+        Parameters
+        ----------
+        epochs : int
+            Number of epochs to train
+
+        Returns
+        -------
+        np.ndarray
+            Array of average loss values per epoch
+        """
         losses = np.zeros(epochs)
         self.optimizer.zero_grad()
         for i in range(epochs):
@@ -105,6 +156,9 @@ class BYOLATrainer:
         return losses
 
     def _update_target(self) -> None:
+        """
+        Update target network parameters using exponential moving average.
+        """
         with torch.no_grad():
             current_tau = self.tau_scheduler.step()
             for t, o in zip(self.target_model.backbone.parameters(), self.online_model.backbone.parameters()):

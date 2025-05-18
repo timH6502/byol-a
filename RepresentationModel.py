@@ -3,13 +3,34 @@ import torch.nn as nn
 
 
 class RepresentationModel(nn.Module):
+    """
+    BYOL-A representation model combining backbone encoder with projection head and optional prediction head.
+
+    Parameters
+    ----------
+    backbone : nn.Module
+        Encoding network
+    input_shape : tuple[int, int]
+        Expected input spectrogram dimensions (height, width)
+    projector_dim : int, default=256
+        Dimension of projected latent space
+    hidden_dim : int, default=4096
+        Hidden layer dimension in projector/predictor
+    dropout_p : float, defualt=0.0
+        Dropout probability in projector
+    include_predictor : bool, default=False
+        Whether to include predictor MLP
+    """
+
     def __init__(self,
                  backbone: nn.Module,
                  input_shape: tuple[int, int],
                  projector_dim: int = 256,
                  hidden_dim: int = 4096,
-                 dropout_p: float = 0.2,
+                 dropout_p: float = 0.0,
                  include_predictor: bool = False) -> None:
+        """Initialize representation model."""
+
         super().__init__()
         self.backbone = backbone
         dummy_input = torch.zeros(1, 1, *input_shape)
@@ -33,6 +54,20 @@ class RepresentationModel(nn.Module):
             )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass through network components.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input spectrogram tensor of shape (batch_size, 1, freq_bins, time_steps)
+
+        Returns
+        -------
+        torch.Tensor or tuple
+            - With predictor: (backbone_out, projector_out, predictor_out)
+            - Without predictor: (backbone_out, projector_out)
+        """
         z = self.backbone(x)
         p = self.projector(z)
         if self.include_predictor:

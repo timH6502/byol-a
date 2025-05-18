@@ -33,6 +33,14 @@ def init_logger(logger_name: str, level: int = logging.INFO) -> logging.Logger:
 
 
 def set_seeds(seed: int = 42) -> None:
+    """
+    Set random seeds for reproducibility across multiple libraries.
+
+    Parameters
+    ----------
+    seed : int, default=42
+        Random seed value to use
+    """
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)

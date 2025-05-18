@@ -6,12 +6,29 @@ import torch.nn.functional as F
 
 
 class AugmentationPipeline(nn.Module):
+    """
+    Audio spectrogram augmentation pipeline for BYOL-A self-supervised learning.
+
+    Parameters
+    ----------
+    initial_norm_mean : float, default=0.0
+        Initial value for running mean of normalization
+    initial_norm_std : float, default=1.0
+        Initial value for running standard deviation
+    mixup_alpha : float, default=0.4
+        Maximum mixup coefficient
+    memory_size : int, defualt=2048
+        Size of memory bank for mixup candidates
+    """
 
     def __init__(self,
                  initial_norm_mean: float = 0.0,
                  initial_norm_std: float = 1.0,
                  mixup_alpha: float = 0.4,
                  memory_size: int = 2048) -> None:
+        """
+        Initialize augmentation pipeline with normalization and mixup memory.
+        """
         super().__init__()
         self.initial_norm_mean = initial_norm_mean
         self.initial_norm_std = initial_norm_std
@@ -24,6 +41,21 @@ class AugmentationPipeline(nn.Module):
         )
 
     def running_norm(self, x: torch.Tensor, update: bool = True) -> torch.Tensor:
+        """
+        Apply running normalization with optional statistic update.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input spectrogram of shape (C, Freq, Time)
+        update : bool, optional
+            Whether to update running statistics, by default True
+
+        Returns
+        -------
+        torch.Tensor
+            Normalized spectrogram
+        """
         if update:
             count = self.running_stats['count']
             new_mean = (self.running_stats['current_mean']
@@ -38,6 +70,19 @@ class AugmentationPipeline(nn.Module):
         return (x - self.running_stats['current_mean']) / self.running_stats['current_std']
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Apply full augmentation pipeline to input spectrogram.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Raw input spectrogram of shape (C, Freq, Time)
+
+        Returns
+        -------
+        torch.Tensor
+            Augmented spectrogram
+        """
         x = self.running_norm(x)
         if len(self.cached_audio) == 0:
             x_mix = x
@@ -58,6 +103,23 @@ class AugmentationPipeline(nn.Module):
             spec_1: torch.Tensor,
             spec_2: torch.Tensor,
             lambda_range: tuple[float, float] = (0, 0.3)) -> torch.Tensor:
+        """
+        Mix two spectrograms.
+
+        Parameters
+        ----------
+        spec_1 : torch.Tensor
+            First spectrogram
+        spec_2 : torch.Tensor
+            Second spectrogram
+        lambda_range : tuple[float, float], default=(0.0, 0.3)
+            Range for mixup coefficient. Sampled from a unifor distribution.
+
+        Returns
+        -------
+        torch.Tensor
+            Mixed spectrograms
+        """
         lmbda = (lambda_range[1] - lambda_range[0]) * \
             torch.rand(1, device=spec_1.device) + lambda_range[0]
         mixed = (1 - lmbda) * spec_1.exp() + lmbda * spec_2.exp()
@@ -67,6 +129,21 @@ class AugmentationPipeline(nn.Module):
     def random_linear_fade(
             spectrogram: torch.Tensor,
             uniform_dist_range: tuple[float, float] = (-1, 1)) -> torch.Tensor:
+        """
+        Add time-linear gain curve to spectrogram
+
+        Parameters
+        ----------
+        spectrogram : torch.Tensor
+            Input spectrogram
+        uniform_dist_range : tuple[float, float], default=(-1, 1)
+            Slope of the curve
+
+        Returns
+        -------
+        torch.Tensor
+            Augmented spectrogram
+        """
         _, _, T = spectrogram.shape
         alpha, beta = (uniform_dist_range[1] - uniform_dist_range[0]) * torch.rand(
             2, device=spectrogram.device) + uniform_dist_range[0]
@@ -83,6 +160,28 @@ class AugmentationPipeline(nn.Module):
             freq_scale: tuple[float, float] = (0.6, 1.5),
             time_scale: tuple[float, float] = (0.6, 1.5),
             interpolation: str = 'bicubic') -> torch.Tensor:
+        """
+        Random spatiotemporal crop with resizing to original dimensions
+
+        Parameters
+        ----------
+        spectrogram : torch.Tensor
+            Input spectrogram
+        virtual_crop_scale : tuple[float, float], default=(1.0, 1.5)
+            Scale range for virtual crop area
+        freq_scale : tuple[float, float], default=(0.6, 1.5)
+            Frequency axis scaling range
+        time_scale : tuple[float, float], default=(0.6, 1.5)
+            Time axis scaling range
+        interpolation : str, default='bicubic'
+            Interpolation method for resize
+
+        Returns
+        -------
+        torch.Tensor
+            Augmented spectrogram
+
+        """
         C, FR, T = spectrogram.shape
         virtual_crop_h = int(FR * virtual_crop_scale[0])
         virtual_crop_w = int(T * virtual_crop_scale[1])
