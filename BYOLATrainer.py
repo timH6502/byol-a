@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import torch
 
@@ -57,7 +59,8 @@ class BYOLATrainer:
                  device: torch.device,
                  use_amp: bool = False,
                  accumulation_steps: int = 1,
-                 batch_size: int = 64) -> None:
+                 batch_size: int = 64,
+                 save_path: Path = Path('./models')) -> None:
         self.online_model = online_model.to(device)
         self.target_model = target_model.to(device)
         self.tau_scheduler = tau_scheduler
@@ -69,6 +72,10 @@ class BYOLATrainer:
         self.use_amp = use_amp
         self.accumulation_steps = accumulation_steps
         self.device = device
+        self.save_path = save_path
+
+        if not self.save_path.exists():
+            self.save_path.mkdir()
 
         self.logger = init_logger('Trainer')
 
@@ -153,6 +160,7 @@ class BYOLATrainer:
             self.logger.info(
                 f'Average loss: {losses[i]}')
             self.lr_scheduler.step()
+            self._save_models()
         return losses
 
     def _update_target(self) -> None:
@@ -165,3 +173,12 @@ class BYOLATrainer:
                 t.data = current_tau * t.data + (1 - current_tau) * o.data
             for t, o in zip(self.target_model.projector.parameters(), self.online_model.projector.parameters()):
                 t.data = current_tau * t.data + (1 - current_tau) * o.data
+
+    def _save_models(self) -> None:
+        """
+        Save current state of online and target models to disk.
+        """
+        torch.save(self.online_model.state_dict(),
+                   self.save_path / 'online_model.pth')
+        torch.save(self.target_model.state_dict(),
+                   self.save_path / 'target_model.pth')
