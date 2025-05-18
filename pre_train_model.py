@@ -74,7 +74,7 @@ if __name__ == '__main__':
         spectrogram_dimensions=spectrogram_shape)
 
     tau_scheduler = TauScheduler(
-        int(len(dataset) * epochs / (accumulation_steps * batch_size)), 0.99)
+        int(len(dataset) * epochs / (accumulation_steps * batch_size)), 0.996)
 
     optimizer = torch.optim.AdamW(online_model.parameters(
     ), lr=1e-4, betas=(0.9, 0.99), weight_decay=1e-4)
