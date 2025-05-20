@@ -67,14 +67,15 @@ class AugmentationPipeline(nn.Module):
         """
         if pre_norm:
             stats = self.pre_norm_running_stats
-            count = stats['count'].value
-            new_mean = (stats['current_mean'].value *
-                        count + x.mean().item()) / (count + 1)
-            new_std = (stats['current_std'].value *
-                       count + x.std().item()) / (count + 1)
-            stats['current_mean'].value = new_mean
-            stats['current_std'].value = new_std
-            stats['count'].value = count + 1
+            with stats['lock']:
+                count = stats['count'].value
+                new_mean = (stats['current_mean'].value *
+                            count + x.mean().item()) / (count + 1)
+                new_std = (stats['current_std'].value *
+                           count + x.std().item()) / (count + 1)
+                stats['current_mean'].value = new_mean
+                stats['current_std'].value = new_std
+                stats['count'].value = count + 1
         else:
             stats = self.post_norm_running_stats
             with stats['lock']:
