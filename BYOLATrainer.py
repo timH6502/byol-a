@@ -175,7 +175,9 @@ class BYOLATrainer:
                 f'Epoch: {i + 1}\tLearning rate: {self.lr_scheduler.get_last_lr()[-1]}')
             losses[i] = self._train_one_epoch()
             self.logger.info(
-                f'Average loss: {losses[i]}')
+                f'Average loss: {losses[i]}\t'
+                f'Running mean: {self.data_loader.dataset.augmentation_pipeline.running_stats["current_mean"].value}\t'
+                f'Running std: {self.data_loader.dataset.augmentation_pipeline.running_stats["current_std"].value}')
             self.lr_scheduler.step()
             self._save_models()
         return losses

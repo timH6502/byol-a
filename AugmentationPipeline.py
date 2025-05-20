@@ -1,4 +1,5 @@
 from collections import deque
+from multiprocessing import Value, Manager
 
 import torch
 import torch.nn as nn
@@ -34,11 +35,12 @@ class AugmentationPipeline(nn.Module):
         self.initial_norm_std = initial_norm_std
         self.mixup_alpha = mixup_alpha
         self.cached_audio = deque(maxlen=memory_size)
-        self.running_stats = dict(
-            current_mean=initial_norm_mean,
-            current_std=initial_norm_std,
-            count=1
-        )
+        self.running_stats = {
+            'current_mean': Value('d', initial_norm_mean),
+            'current_std': Value('d', initial_norm_std),
+            'count': Value('i', 1),
+            'lock': Manager().Lock()
+        }
 
     def running_norm(self, x: torch.Tensor, update: bool = True) -> torch.Tensor:
         """
@@ -57,17 +59,17 @@ class AugmentationPipeline(nn.Module):
             Normalized spectrogram
         """
         if update:
-            count = self.running_stats['count']
-            new_mean = (self.running_stats['current_mean']
+            count = self.running_stats['count'].value
+            new_mean = (self.running_stats['current_mean'].value
                         * count + x.mean().item()) / (count + 1)
-            new_std = (self.running_stats['current_std']
+            new_std = (self.running_stats['current_std'].value
                        * count + x.std().item()) / (count + 1)
 
-            self.running_stats['current_mean'] = new_mean
-            self.running_stats['current_std'] = new_std
-            self.running_stats['count'] = count + 1
+            self.running_stats['current_mean'].value = new_mean
+            self.running_stats['current_std'].value = new_std
+            self.running_stats['count'].value = count + 1
 
-        return (x - self.running_stats['current_mean']) / self.running_stats['current_std']
+        return (x - self.running_stats['current_mean'].value) / self.running_stats['current_std'].value
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
