@@ -26,7 +26,8 @@ class AugmentationPipeline(nn.Module):
                  initial_norm_mean: float = 0.0,
                  initial_norm_std: float = 1.0,
                  mixup_alpha: float = 0.4,
-                 memory_size: int = 2048) -> None:
+                 memory_size: int = 2048,
+                 post_norm_ema_decay: float = 0.995) -> None:
         """
         Initialize augmentation pipeline with normalization and mixup memory.
         """
@@ -35,14 +36,20 @@ class AugmentationPipeline(nn.Module):
         self.initial_norm_std = initial_norm_std
         self.mixup_alpha = mixup_alpha
         self.cached_audio = deque(maxlen=memory_size)
-        self.running_stats = {
+        self.post_norm_ema_decay = post_norm_ema_decay
+        self.pre_norm_running_stats = {
             'current_mean': Value('d', initial_norm_mean),
             'current_std': Value('d', initial_norm_std),
             'count': Value('i', 1),
             'lock': Manager().Lock()
         }
+        self.post_norm_running_stats = {
+            'current_mean': Value('d', initial_norm_mean),
+            'current_std': Value('d', initial_norm_std),
+            'lock': Manager().Lock()
+        }
 
-    def running_norm(self, x: torch.Tensor, update: bool = True) -> torch.Tensor:
+    def running_norm(self, x: torch.Tensor, pre_norm: bool = True) -> torch.Tensor:
         """
         Apply running normalization with optional statistic update.
 
@@ -50,26 +57,40 @@ class AugmentationPipeline(nn.Module):
         ----------
         x : torch.Tensor
             Input spectrogram of shape (C, Freq, Time)
-        update : bool, optional
-            Whether to update running statistics, by default True
+        pre_norm : bool, optional
+            Whether pre- or post-norm is used.
 
         Returns
         -------
         torch.Tensor
             Normalized spectrogram
         """
-        if update:
-            count = self.running_stats['count'].value
-            new_mean = (self.running_stats['current_mean'].value
-                        * count + x.mean().item()) / (count + 1)
-            new_std = (self.running_stats['current_std'].value
-                       * count + x.std().item()) / (count + 1)
+        if pre_norm:
+            stats = self.pre_norm_running_stats
+            count = stats['count'].value
+            new_mean = (stats['current_mean'].value *
+                        count + x.mean().item()) / (count + 1)
+            new_std = (stats['current_std'].value *
+                       count + x.std().item()) / (count + 1)
+            stats['current_mean'].value = new_mean
+            stats['current_std'].value = new_std
+            stats['count'].value = count + 1
+        else:
+            stats = self.post_norm_running_stats
+            with stats['lock']:
+                current_mean = stats['current_mean'].value
+                current_std = stats['current_std'].value
 
-            self.running_stats['current_mean'].value = new_mean
-            self.running_stats['current_std'].value = new_std
-            self.running_stats['count'].value = count + 1
+                new_mean = (self.post_norm_ema_decay * current_mean +
+                            (1 - self.post_norm_ema_decay) * x.mean().item())
+                new_std = (self.post_norm_ema_decay * current_std +
+                           (1 - self.post_norm_ema_decay) * x.std().item())
 
-        return (x - self.running_stats['current_mean'].value) / self.running_stats['current_std'].value
+                stats['current_mean'].value = new_mean
+                stats['current_std'].value = new_std
+
+        return (x - stats['current_mean'].value) / \
+            stats['current_std'].value
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -85,7 +106,7 @@ class AugmentationPipeline(nn.Module):
         torch.Tensor
             Augmented spectrogram
         """
-        x = self.running_norm(x)
+        x = self.running_norm(x, pre_norm=True)
         if len(self.cached_audio) == 0:
             x_mix = x
         else:
@@ -96,7 +117,7 @@ class AugmentationPipeline(nn.Module):
 
         cropped = self.random_resize_crop(mixed)
         faded = self.random_linear_fade(cropped)
-        output = self.running_norm(faded, False)
+        output = self.running_norm(faded, pre_norm=False)
 
         return output
 
