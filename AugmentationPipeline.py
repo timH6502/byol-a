@@ -56,7 +56,7 @@ class AugmentationPipeline(nn.Module):
         Parameters
         ----------
         x : torch.Tensor
-            Input spectrogram of shape (C, Freq, Time)
+            Input spectrogram of shape without batch dimension -> (C, Freq, Time)
         pre_norm : bool, optional
             Whether pre- or post-norm is used.
 
@@ -100,7 +100,7 @@ class AugmentationPipeline(nn.Module):
         Parameters
         ----------
         x : torch.Tensor
-            Raw input spectrogram of shape (C, Freq, Time)
+            Raw input spectrogram of shape without batch dimension -> (C, Freq, Time)
 
         Returns
         -------
@@ -228,7 +228,7 @@ class AugmentationPipeline(nn.Module):
         max_j = max(virtual_crop_w - crop_w, 1)
         i = torch.randint(0, max_i, (1,), device=spectrogram.device).item()
         j = torch.randint(0, max_j, (1,), device=spectrogram.device).item()
-        crop = virtual_crop_area[:, i:i+crop_h, j:j+crop_w]
+        crop = virtual_crop_area[:, i:i + crop_h, j:j + crop_w]
         crop = F.interpolate(crop.unsqueeze(0), size=(
             FR, T), mode=interpolation, align_corners=True)
         crop = crop.squeeze(0)
